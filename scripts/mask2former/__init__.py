@@ -1,3 +1,3 @@
 from .dataset import SegmentationDataModule
-from .model import Mask2FormerFinetuner
+from .model_clean import Mask2FormerFinetuner
 from .config import *

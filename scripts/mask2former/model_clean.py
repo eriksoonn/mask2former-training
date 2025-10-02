@@ -1,4 +1,4 @@
-from transformers import Mask2FormerForUniversalSegmentation, AutoImageProcessor
+from transformers import Mask2FormerForUniversalSegmentation, Mask2FormerConfig, AutoImageProcessor
 from typing import Dict, List, Optional, Tuple, Any
 import mask2former.config as config
 import pytorch_lightning as pl
@@ -10,24 +10,35 @@ import time
 
 
 class Mask2FormerFinetuner(pl.LightningModule):
-    def __init__(self, id2label: Dict[int, str], lr: float):
+    def __init__(self, id2label: Dict[int, str], lr: float, use_pretrained: bool = True, compile: bool = False):
         super().__init__()
-        pretrained_model        = "facebook/mask2former-swin-base-ade-semantic"
+        pretrained_model = "facebook/mask2former-swin-base-ade-semantic"
 
-        self.id2label           = id2label
-        self.lr                 = lr
-        self.num_classes        = len(id2label)
-        self.label2id           = {v: k for k, v in id2label.items()}
-        
-        self.model              = Mask2FormerForUniversalSegmentation.from_pretrained(
-            pretrained_model,
-            id2label=self.id2label,
-            label2id=self.label2id,
-            ignore_mismatched_sizes=True,
-        )
-        self.processor          = AutoImageProcessor.from_pretrained(
-            "facebook/mask2former-swin-base-ade-semantic"
-        )
+        self.id2label   = id2label
+        self.lr         = lr
+        self.num_classes= len(id2label)
+        self.label2id   = {v: k for k, v in id2label.items()}
+
+        if use_pretrained:
+            self.model = Mask2FormerForUniversalSegmentation.from_pretrained(
+                pretrained_model,
+                id2label=self.id2label,
+                label2id=self.label2id,
+                ignore_mismatched_sizes=True,
+            )
+        else:
+            config = Mask2FormerConfig.from_pretrained(
+                pretrained_model,
+                num_labels=self.num_classes,
+                id2label=self.id2label,
+                label2id=self.label2id,
+            )
+            self.model = Mask2FormerForUniversalSegmentation(config)
+
+        if compile:
+            self.model = torch.compile(self.model)
+
+        self.processor = AutoImageProcessor.from_pretrained(pretrained_model)
         self.test_mean_iou = evaluate.load("mean_iou")
         self._per_image_metrics: List = []
 
@@ -66,25 +77,11 @@ class Mask2FormerFinetuner(pl.LightningModule):
             class_labels=[labels for labels in batch["class_labels"]],
         )
         loss = outputs.loss
-        self.log(
-            "valLoss",
-            loss,
-            sync_dist=True,
-            batch_size=config.BATCH_SIZE,
-            on_epoch=True,
-            logger=True,
-            prog_bar=True,
-        )
         lr = self.trainer.optimizers[0].param_groups[0]["lr"]
-        self.log(
-            "learning_rate",
-            lr,
-            sync_dist=True,
-            batch_size=config.BATCH_SIZE,
-            on_epoch=True,
-            logger=True,
-            prog_bar=True,
-        )
+
+        self.log("train_loss", loss, sync_dist=True, batch_size=config.BATCH_SIZE, on_epoch=True, logger=True, prog_bar=True)
+        self.log("learning_rate", lr, sync_dist=True, batch_size=config.BATCH_SIZE, on_epoch=True, logger=True, prog_bar=True)
+
         return loss
 
     def validation_step(self, batch: Dict, batch_idx: int) -> torch.Tensor:
@@ -96,7 +93,7 @@ class Mask2FormerFinetuner(pl.LightningModule):
             class_labels=[labels for labels in batch["class_labels"]],
         )
 
-        self.log("valLoss", outputs.loss, sync_dist=True, batch_size=config.BATCH_SIZE, on_epoch=True, logger=True, prog_bar=True)
+        self.log("val_loss", outputs.loss, sync_dist=True, batch_size=config.BATCH_SIZE, on_epoch=True, logger=True, prog_bar=True)
         self.log("learning_rate", lr, sync_dist=True, batch_size=config.BATCH_SIZE, on_epoch=True, logger=True, prog_bar=True)
 
         return outputs.loss
@@ -168,8 +165,8 @@ class Mask2FormerFinetuner(pl.LightningModule):
             "scheduler": torch.optim.lr_scheduler.ReduceLROnPlateau(
                 optimizer,
                 mode="min",
-                factor=config.FACTOR,
-                patience=config.PATIENCE,
+                factor=config.LR_SCHEDULER.get('factor'),
+                patience=config.LR_SCHEDULER.get('patience'),
             ),
             "reduce_on_plateau": True,
             "monitor": "valLoss",

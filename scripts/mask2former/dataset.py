@@ -48,7 +48,8 @@ class SegmentationDataModule(pl.LightningDataModule):
         self.num_workers    = num_workers
         self.img_size       = img_size
         self.processor      = AutoImageProcessor.from_pretrained(
-            "facebook/mask2former-swin-base-ade-semantic"
+            "facebook/mask2former-swin-base-ade-semantic",
+            use_fast=False
         )
     
     def setup(self, stage: Optional[str] = None) -> None:

@@ -1,5 +1,5 @@
+from pytorch_lightning.loggers import CSVLogger, TensorBoardLogger
 from pytorch_lightning.callbacks import ModelCheckpoint
-from pytorch_lightning.loggers import CSVLogger
 from typing import Dict, List, Tuple
 import os
 
@@ -7,12 +7,22 @@ import os
 # Training Hyperparameters
 LEARNING_RATE: float = 5e-5
 EPOCHS: int = 180
-PRECISION: str = "16-mixed"
-DEVICES: List[int] = [0, 1]
-IMG_SIZE: Tuple[int, int] = (640, 640)
+PRECISION: str = "bf16-mixed"
+DEVICES: List[int] = [1]
+IMG_SIZE: Tuple[int, int] = (1280, 1280)
 
+PRETRAINED:bool = False
+
+COMPILE: bool = False
 NUM_WORKERS: int = 8
-BATCH_SIZE: int = 4
+BATCH_SIZE: int = 1
+ACCUMULATE_GRAD_BATCHES: int = 32
+
+# Learning Rate Scheduler Configuration
+LR_SCHEDULER: Dict[str, float] = {
+    "factor": 0.5,
+    "patience": 8,
+}
 
 # Checkpoint Callback Configuration
 CHECKPOINT_CALLBACK: ModelCheckpoint = ModelCheckpoint(
@@ -30,11 +40,10 @@ LOGGER: CSVLogger = CSVLogger(
     name="lightning_logs_csv",
 )
 
-# Learning Rate Scheduler Configuration
-LR_SCHEDULER: Dict[str, float] = {
-    "factor": 0.5,
-    "patience": 8,
-}
+TENSORBOARD_LOGGER = TensorBoardLogger(
+    save_dir="outputs",
+    name="lightning_logs_tb",
+)
 
 # Dataset Configuration
 DATASET_DIR: str = os.path.abspath(
