@@ -1,0 +1,7 @@
+# Ignore data directories
+Mask2Former.egg-info/
+data/
+outputs/
+
+#
+scripts/mask2former/__pycache__/
