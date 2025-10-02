@@ -54,7 +54,7 @@ class Mask2FormerFinetuner(pl.LightningModule):
             self.processor = AutoImageProcessor.from_pretrained(model_id, use_fast=False)
             self.processor.save_pretrained(proc_dir)
 
-        self.test_mean_iou = evaluate.load("mean_iou")
+        self.test_mean_iou = evaluate.load("./metrics/mean_iou")
         self._per_image_metrics: List = []
 
 
