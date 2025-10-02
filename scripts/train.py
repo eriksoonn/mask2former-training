@@ -18,6 +18,7 @@ from mask2former import (
     PRECISION,
     ACCUMULATE_GRAD_BATCHES,
     TENSORBOARD_LOGGER,
+    LOCAL_PROCESSOR,
 )
 import warnings
 import torch
@@ -40,6 +41,7 @@ def main():
         batch_size=BATCH_SIZE,
         num_workers=NUM_WORKERS,
         img_size=IMG_SIZE,
+        local_processor=LOCAL_PROCESSOR,
     )
 
     # Initialize model
@@ -47,7 +49,8 @@ def main():
         id2label=ID2LABEL,
         lr=LEARNING_RATE,
         use_pretrained=PRETRAINED,
-        compile=COMPILE
+        compile=COMPILE,
+        local_processor=LOCAL_PROCESSOR
     )
 
     # Set up trainer

@@ -12,6 +12,7 @@ DEVICES: List[int] = [1]
 IMG_SIZE: Tuple[int, int] = (1280, 1280)
 
 PRETRAINED:bool = False
+LOCAL_PROCESSOR: bool = True
 
 COMPILE: bool = False
 NUM_WORKERS: int = 8

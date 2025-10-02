@@ -3,6 +3,7 @@ from typing import Optional, Tuple, List
 from torch.utils.data import DataLoader 
 from torch.utils.data import Dataset
 import pytorch_lightning as pl
+from pathlib import Path
 from PIL import Image
 import numpy as np
 import os
@@ -41,16 +42,24 @@ class ImageSegmentationDataset(Dataset):
         return np_image, np_mask
     
 class SegmentationDataModule(pl.LightningDataModule):
-    def __init__(self, dataset_dir: str, batch_size: int, num_workers: int, img_size: Tuple[int, int]):
+    def __init__(self, dataset_dir: str, batch_size: int, num_workers: int, img_size: Tuple[int, int], local_processor: bool = False):
         super().__init__()
-        self.dataset_dir    = dataset_dir
-        self.batch_size     = batch_size
-        self.num_workers    = num_workers
-        self.img_size       = img_size
-        self.processor      = AutoImageProcessor.from_pretrained(
-            "facebook/mask2former-swin-base-ade-semantic",
-            use_fast=False
-        )
+        model_id   = "facebook/mask2former-swin-base-ade-semantic"
+        proc_dir   = "artifacts/mask2former_image_processor"
+
+        self.dataset_dir = dataset_dir
+        self.batch_size  = batch_size
+        self.num_workers = num_workers
+        self.img_size    = img_size
+
+        # Load local copy if requested; otherwise try remote and persist for next runs.
+        try:
+            src = proc_dir if local_processor else model_id
+            self.processor = AutoImageProcessor.from_pretrained(src, local_files_only=local_processor)
+        except Exception:
+            # Fallback: fetch from hub, then save locally for future local loads.
+            self.processor = AutoImageProcessor.from_pretrained(model_id, use_fast=False)
+            self.processor.save_pretrained(proc_dir)
     
     def setup(self, stage: Optional[str] = None) -> None:
         # Define dataset paths

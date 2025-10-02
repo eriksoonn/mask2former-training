@@ -10,25 +10,26 @@ import time
 
 
 class Mask2FormerFinetuner(pl.LightningModule):
-    def __init__(self, id2label: Dict[int, str], lr: float, use_pretrained: bool = True, compile: bool = False):
+    def __init__(self, id2label: Dict[int, str], lr: float, use_pretrained: bool = True, compile: bool = False, local_processor: bool = False):
         super().__init__()
-        pretrained_model = "facebook/mask2former-swin-base-ade-semantic"
+        model_id = "facebook/mask2former-swin-base-ade-semantic"
+        proc_dir = "artifacts/mask2former_image_processor"
 
-        self.id2label   = id2label
-        self.lr         = lr
-        self.num_classes= len(id2label)
-        self.label2id   = {v: k for k, v in id2label.items()}
+        self.id2label    = id2label
+        self.lr          = lr
+        self.num_classes = len(id2label)
+        self.label2id    = {v: k for k, v in id2label.items()}
 
         if use_pretrained:
             self.model = Mask2FormerForUniversalSegmentation.from_pretrained(
-                pretrained_model,
+                model_id,
                 id2label=self.id2label,
                 label2id=self.label2id,
                 ignore_mismatched_sizes=True,
             )
         else:
             config = Mask2FormerConfig.from_pretrained(
-                pretrained_model,
+                model_id,
                 num_labels=self.num_classes,
                 id2label=self.id2label,
                 label2id=self.label2id,
@@ -38,9 +39,17 @@ class Mask2FormerFinetuner(pl.LightningModule):
         if compile:
             self.model = torch.compile(self.model)
 
-        self.processor = AutoImageProcessor.from_pretrained(pretrained_model)
+        # Processor: local first if requested, otherwise fetch & save
+        try:
+            src = proc_dir if local_processor else model_id
+            self.processor = AutoImageProcessor.from_pretrained(src, local_files_only=local_processor)
+        except Exception:
+            self.processor = AutoImageProcessor.from_pretrained(model_id, use_fast=False)
+            self.processor.save_pretrained(proc_dir)
+
         self.test_mean_iou = evaluate.load("mean_iou")
         self._per_image_metrics: List = []
+
 
     def forward(self, pixel_values: torch.Tensor, mask_labels: Optional[List[torch.Tensor]] = None, class_labels: Optional[List[torch.Tensor]] = None) -> Any:
         # Forward pass of the model
