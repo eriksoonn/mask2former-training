@@ -14,12 +14,26 @@ class Mask2FormerFinetuner(pl.LightningModule):
         super().__init__()
         model_id = "facebook/mask2former-swin-base-ade-semantic"
         proc_dir = "artifacts/mask2former_image_processor"
+        cfg_dir  = "artifacts/mask2former_config"
 
         self.id2label    = id2label
         self.lr          = lr
         self.num_classes = len(id2label)
         self.label2id    = {v: k for k, v in id2label.items()}
 
+        # Config
+        if local_processor:
+            config = Mask2FormerConfig.from_pretrained(cfg_dir, local_files_only=True)
+        else:
+            config = Mask2FormerConfig.from_pretrained(
+                model_id,
+                num_labels=self.num_classes,
+                id2label=self.id2label,
+                label2id=self.label2id,
+            )
+            config.save_pretrained(cfg_dir)
+
+        # Model:
         if use_pretrained:
             self.model = Mask2FormerForUniversalSegmentation.from_pretrained(
                 model_id,
@@ -28,22 +42,15 @@ class Mask2FormerFinetuner(pl.LightningModule):
                 ignore_mismatched_sizes=True,
             )
         else:
-            config = Mask2FormerConfig.from_pretrained(
-                model_id,
-                num_labels=self.num_classes,
-                id2label=self.id2label,
-                label2id=self.label2id,
-            )
             self.model = Mask2FormerForUniversalSegmentation(config)
 
         if compile:
             self.model = torch.compile(self.model)
 
-        # Processor: local first if requested, otherwise fetch & save
-        try:
-            src = proc_dir if local_processor else model_id
-            self.processor = AutoImageProcessor.from_pretrained(src, local_files_only=local_processor)
-        except Exception:
+        # Processor
+        if local_processor:
+            self.processor = AutoImageProcessor.from_pretrained(proc_dir, local_files_only=True)
+        else:
             self.processor = AutoImageProcessor.from_pretrained(model_id, use_fast=False)
             self.processor.save_pretrained(proc_dir)
 

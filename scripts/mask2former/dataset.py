@@ -53,11 +53,9 @@ class SegmentationDataModule(pl.LightningDataModule):
         self.img_size    = img_size
 
         # Load local copy if requested; otherwise try remote and persist for next runs.
-        try:
-            src = proc_dir if local_processor else model_id
-            self.processor = AutoImageProcessor.from_pretrained(src, local_files_only=local_processor)
-        except Exception:
-            # Fallback: fetch from hub, then save locally for future local loads.
+        if local_processor:
+            self.processor = AutoImageProcessor.from_pretrained(proc_dir, local_files_only=True)
+        else:
             self.processor = AutoImageProcessor.from_pretrained(model_id, use_fast=False)
             self.processor.save_pretrained(proc_dir)
     
