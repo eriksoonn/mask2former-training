@@ -3,6 +3,7 @@ from typing import Optional, Tuple, List
 from torch.utils.data import DataLoader 
 from torch.utils.data import Dataset
 import pytorch_lightning as pl
+import albumentations as A
 from pathlib import Path
 from PIL import Image
 import numpy as np
@@ -11,10 +12,10 @@ import os
 
 class ImageSegmentationDataset(Dataset):    
     def __init__(self, images_dir: str, masks_dir: str, transform: Optional[callable] = None):
-        self.images_dir = images_dir
-        self.masks_dir  = masks_dir
-        self.transform  = transform
-        self.filenames  = [
+        self.images_dir     = images_dir
+        self.masks_dir      = masks_dir
+        self.transform      = transform
+        self.filenames      = [
             os.path.splitext(f)[0] 
             for f in os.listdir(images_dir) 
             if not f.startswith('.') and f.endswith('.jpg')
@@ -27,30 +28,34 @@ class ImageSegmentationDataset(Dataset):
         img_path    = os.path.join(self.images_dir, f"{self.filenames[idx]}.jpg")
         mask_path   = os.path.join(self.masks_dir, f"{self.filenames[idx]}.png")
         
-        # Load and preprocess image
-        image       = Image.open(img_path).convert("RGB")
-        np_image    = np.array(image).transpose(2, 0, 1)   # Convert to C, H, W
+        image = Image.open(img_path).convert("RGB")
+        mask  = Image.open(mask_path)
         
-        # Load and preprocess mask
-        mask    = Image.open(mask_path)
-        np_mask = np.array(mask)
-        np_mask = np.where(np_mask == 255, 1, np_mask)  # Convert 255 to 1
+        np_image = np.array(image)                                          # H, W, C
+        np_mask  = np.array(mask)                                           # H, W
+        np_mask  = np.where(np_mask == 255, 1, np_mask).astype(np.uint8)    # 255->1 for FG
         
         if self.transform:
-            image, mask = self.transform(image, mask)
+            aug = self.transform(image=np_image, mask=np_mask)
+            np_image, np_mask = aug["image"], aug["mask"]
             
+        # keep original return shape (C, H, W) to minimize downstream changes
+        np_image = np_image.transpose(2, 0, 1)
+
         return np_image, np_mask
     
 class SegmentationDataModule(pl.LightningDataModule):
-    def __init__(self, dataset_dir: str, batch_size: int, num_workers: int, img_size: Tuple[int, int], local_processor: bool = False):
+    def __init__(self, dataset_dir: str, batch_size: int, num_workers: int, img_size: Tuple[int, int], local_processor: bool = False, keep_originals: bool = False):
         super().__init__()
         model_id   = "facebook/mask2former-swin-base-ade-semantic"
         proc_dir   = "artifacts/mask2former_image_processor"
 
-        self.dataset_dir = dataset_dir
-        self.batch_size  = batch_size
-        self.num_workers = num_workers
-        self.img_size    = img_size
+        self.dataset_dir        = dataset_dir
+        self.batch_size         = batch_size
+        self.num_workers        = num_workers
+        self.img_size           = img_size
+        self.keep_originals     = keep_originals
+        self.train_transform    = None
 
         # Load local copy if requested; otherwise try remote and persist for next runs.
         if local_processor:
@@ -59,6 +64,46 @@ class SegmentationDataModule(pl.LightningDataModule):
             self.processor = AutoImageProcessor.from_pretrained(model_id, use_fast=False)
             self.processor.save_pretrained(proc_dir)
     
+        self.train_transform = A.Compose([
+            # Geometric
+            A.HorizontalFlip(p=0.5),
+            A.VerticalFlip(p=0.2),
+            A.ShiftScaleRotate(
+                shift_limit=0.05, scale_limit=0.1, rotate_limit=20,
+                border_mode=0, p=0.5
+            ),
+            A.RandomResizedCrop(
+                size=img_size,
+                scale=(0.8, 1.0), ratio=(0.9, 1.1), p=0.5
+            ),
+
+            # # Blur/Noise
+            A.GaussianBlur(blur_limit=(3, 5), p=0.2),
+            A.GaussNoise(var_limit=(10.0, 50.0), p=0.2),
+
+            # # Weather augmentations 🌧️
+            # A.RandomRain(
+            #     slant_lower=-10, slant_upper=10,
+            #     brightness_coefficient=0.9,
+            #     drop_length=20, drop_width=1, drop_color=(200, 200, 200),
+            #     blur_value=3, p=0.3
+            # ),
+
+            # # Color augmentations
+            A.ColorJitter(
+                brightness=0.3, contrast=0.3, saturation=0.3, hue=0.2,
+                p=0.6
+            ),
+            A.HueSaturationValue(
+                hue_shift_limit=15, sat_shift_limit=20, val_shift_limit=15,
+                p=0.3
+            ),
+            A.RGBShift(
+                r_shift_limit=20, g_shift_limit=20, b_shift_limit=20,
+                p=0.2
+            ),
+        ])
+
     def setup(self, stage: Optional[str] = None) -> None:
         # Define dataset paths
         train_dir       = os.path.join(self.dataset_dir, 'images', 'train')
@@ -73,7 +118,7 @@ class SegmentationDataModule(pl.LightningDataModule):
             self.train_dataset = ImageSegmentationDataset(
                 images_dir=train_dir,
                 masks_dir=train_mask_dir,
-                transform=None
+                transform=self.train_transform
             )
             self.val_dataset = ImageSegmentationDataset(
                 images_dir=val_dir,
@@ -94,7 +139,9 @@ class SegmentationDataModule(pl.LightningDataModule):
             batch_size=self.batch_size,
             shuffle=True,
             num_workers=self.num_workers,
-            collate_fn=self._collate_fn
+            collate_fn=self._collate_fn,
+            pin_memory=True,
+            persistent_workers=False
         )
     
     def val_dataloader(self) -> DataLoader:
@@ -104,7 +151,9 @@ class SegmentationDataModule(pl.LightningDataModule):
             batch_size=self.batch_size,
             shuffle=False,
             num_workers=self.num_workers,
-            collate_fn=self._collate_fn
+            collate_fn=self._collate_fn,
+            pin_memory=True,
+            persistent_workers=False
         )
     
     def test_dataloader(self) -> DataLoader:
@@ -117,14 +166,14 @@ class SegmentationDataModule(pl.LightningDataModule):
             collate_fn=self._collate_fn
         )
         
-    def _collate_fn(self, batch: List[Tuple[np.ndarray, np.ndarray]]) -> dict:
-        images, segmentation_maps = zip(*batch)
-        processed_batch = self.processor(
-            images=images,
-            segmentation_maps=segmentation_maps,
-            size=self.img_size,
-            return_tensors="pt"
+    def _collate_fn(self, batch):
+        images, masks = zip(*batch)
+        out = self.processor(
+            images=images, segmentation_maps=masks,
+            size=self.img_size, return_tensors="pt"
         )
-        processed_batch["original_segmentation_maps"] = segmentation_maps
-        processed_batch["original_images"] = images
-        return processed_batch
+        if self.keep_originals:
+            out["original_images"] = images
+            out["original_segmentation_maps"] = masks
+        return out
+

@@ -8,16 +8,16 @@ import os
 LEARNING_RATE: float = 5e-5
 EPOCHS: int = 180
 PRECISION: str = "bf16-mixed"
-DEVICES: List[int] = [1]
-IMG_SIZE: Tuple[int, int] = (1280, 1280)
+DEVICES: List[int] = [0]
+IMG_SIZE: Tuple[int, int] = (480, 480)
 
 PRETRAINED:bool = False
 LOCAL_PROCESSOR: bool = True
 
 COMPILE: bool = False
 NUM_WORKERS: int = 8
-BATCH_SIZE: int = 1
-ACCUMULATE_GRAD_BATCHES: int = 32
+BATCH_SIZE: int = 8
+ACCUMULATE_GRAD_BATCHES: int = 2
 
 # Learning Rate Scheduler Configuration
 LR_SCHEDULER: Dict[str, float] = {
@@ -28,10 +28,10 @@ LR_SCHEDULER: Dict[str, float] = {
 # Checkpoint Callback Configuration
 CHECKPOINT_CALLBACK: ModelCheckpoint = ModelCheckpoint(
     save_top_k=1,
-    monitor="valLoss",
+    monitor="loss/val",
     every_n_epochs=1,
     save_on_train_epoch_end=True,
-    filename="{epoch}-{valLoss:.4f}",
+    filename="{epoch}-{loss/val:.4f}",
     save_weights_only=False,
 )
 
