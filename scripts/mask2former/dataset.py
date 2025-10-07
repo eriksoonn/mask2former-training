@@ -7,6 +7,7 @@ import albumentations as A
 from pathlib import Path
 from PIL import Image
 import numpy as np
+import cv2
 import os
 
 
@@ -47,7 +48,8 @@ class ImageSegmentationDataset(Dataset):
 class SegmentationDataModule(pl.LightningDataModule):
     def __init__(self, dataset_dir: str, batch_size: int, num_workers: int, img_size: Tuple[int, int], local_processor: bool = False, keep_originals: bool = False):
         super().__init__()
-        model_id   = "facebook/mask2former-swin-base-ade-semantic"
+        #model_id   = "facebook/mask2former-swin-base-ade-semantic"
+        model_id   = "facebook/mask2former-swin-large-mapillary-vistas-semantic"
         proc_dir   = "artifacts/mask2former_image_processor"
 
         self.dataset_dir        = dataset_dir
@@ -63,45 +65,24 @@ class SegmentationDataModule(pl.LightningDataModule):
         else:
             self.processor = AutoImageProcessor.from_pretrained(model_id, use_fast=False)
             self.processor.save_pretrained(proc_dir)
-    
+            
         self.train_transform = A.Compose([
-            # Geometric
             A.HorizontalFlip(p=0.5),
-            A.VerticalFlip(p=0.2),
-            A.ShiftScaleRotate(
-                shift_limit=0.05, scale_limit=0.1, rotate_limit=20,
-                border_mode=0, p=0.5
-            ),
-            A.RandomResizedCrop(
-                size=img_size,
-                scale=(0.8, 1.0), ratio=(0.9, 1.1), p=0.5
-            ),
+            A.RandomScale(scale_limit=(0.2, 1.3), p=1.0),
 
-            # # Blur/Noise
+            # Crops the largest valid rectangle inside the rotated image
+            A.Rotate(limit=10, border_mode=cv2.BORDER_REFLECT_101, crop_border=True, p=0.3),
+
+            # Safety pad + final crop
+            A.PadIfNeeded(min_height=self.img_size[0], min_width=self.img_size[1],
+                        border_mode=cv2.BORDER_REFLECT_101),
+            A.RandomCrop(height=self.img_size[0], width=self.img_size[1], p=1.0),
+
             A.GaussianBlur(blur_limit=(3, 5), p=0.2),
             A.GaussNoise(var_limit=(10.0, 50.0), p=0.2),
-
-            # # Weather augmentations 🌧️
-            # A.RandomRain(
-            #     slant_lower=-10, slant_upper=10,
-            #     brightness_coefficient=0.9,
-            #     drop_length=20, drop_width=1, drop_color=(200, 200, 200),
-            #     blur_value=3, p=0.3
-            # ),
-
-            # # Color augmentations
-            A.ColorJitter(
-                brightness=0.3, contrast=0.3, saturation=0.3, hue=0.2,
-                p=0.6
-            ),
-            A.HueSaturationValue(
-                hue_shift_limit=15, sat_shift_limit=20, val_shift_limit=15,
-                p=0.3
-            ),
-            A.RGBShift(
-                r_shift_limit=20, g_shift_limit=20, b_shift_limit=20,
-                p=0.2
-            ),
+            A.ColorJitter(brightness=0.3, contrast=0.3, saturation=0.3, hue=0.2, p=0.6),
+            A.HueSaturationValue(hue_shift_limit=15, sat_shift_limit=20, val_shift_limit=15, p=0.3),
+            A.RGBShift(r_shift_limit=20, g_shift_limit=20, b_shift_limit=20, p=0.2),
         ])
 
     def setup(self, stage: Optional[str] = None) -> None:

@@ -5,19 +5,20 @@ import os
 
 
 # Training Hyperparameters
-LEARNING_RATE: float = 5e-5
+#LEARNING_RATE: float = 5e-5
+LEARNING_RATE: float = 1e-5
 EPOCHS: int = 180
 PRECISION: str = "bf16-mixed"
 DEVICES: List[int] = [0]
-IMG_SIZE: Tuple[int, int] = (480, 480)
+IMG_SIZE: Tuple[int, int] = (1080, 1920)    # (H, W)
 
-PRETRAINED:bool = False
-LOCAL_PROCESSOR: bool = True
+PRETRAINED:bool = True
+LOCAL_PROCESSOR: bool = False
 
 COMPILE: bool = False
 NUM_WORKERS: int = 8
-BATCH_SIZE: int = 8
-ACCUMULATE_GRAD_BATCHES: int = 2
+BATCH_SIZE: int = 6
+ACCUMULATE_GRAD_BATCHES: int = 4
 
 # Learning Rate Scheduler Configuration
 LR_SCHEDULER: Dict[str, float] = {
@@ -47,29 +48,31 @@ TENSORBOARD_LOGGER = TensorBoardLogger(
 )
 
 # Dataset Configuration
-DATASET_DIR: str = os.path.abspath(
-    os.path.join(os.path.dirname(__file__), "..", "..", "data", "rs19")
-)
+# DATASET_DIR: str = os.path.abspath(
+#     os.path.join(os.path.dirname(__file__), "..", "..", "data", "rs19")
+# )
+
+DATASET_DIR: str = '/mnt/nvme1/datasets/rs19'
+
 
 ID2LABEL: Dict[int, str] = {
-    0: "Background",
-    1: "road",
-    2: "sidewalk",
-    3: "construction",
-    4: "tram-track",
-    5: "fence",
-    6: "pole",
-    7: "traffic-light",
-    8: "traffic-sign",
-    9: "vegetation",
-    10: "terrain",
-    11: "sky",
-    12: "human",
-    13: "rail-track",
-    14: "car",
-    15: "truck",
-    16: "trackbed",
-    17: "on-rails",
-    18: "rail-raised",
-    19: "rail-embedded",
+    0: "road",
+    1: "sidewalk",
+    2: "construction",
+    3: "tram-track",
+    4: "fence",
+    5: "pole",
+    6: "traffic-light",
+    7: "traffic-sign",
+    8: "vegetation",
+    9: "terrain",
+    10: "sky",
+    11: "human",
+    12: "rail-track",
+    13: "car",
+    14: "truck",
+    15: "trackbed",
+    16: "on-rails",
+    17: "rail-raised",
+    18: "rail-embedded",
 }

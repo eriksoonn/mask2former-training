@@ -3,7 +3,7 @@
   "do_reduce_labels": false,
   "do_rescale": true,
   "do_resize": true,
-  "ignore_index": 255,
+  "ignore_index": 65,
   "image_mean": [
     0.48500001430511475,
     0.4560000002384186,
@@ -15,7 +15,7 @@
     0.2239999920129776,
     0.22499999403953552
   ],
-  "num_labels": 150,
+  "num_labels": 65,
   "pad_size": null,
   "resample": 2,
   "rescale_factor": 0.00392156862745098,

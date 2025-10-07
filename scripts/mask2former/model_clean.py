@@ -13,7 +13,8 @@ import time
 class Mask2FormerFinetuner(pl.LightningModule):
     def __init__(self, id2label: Dict[int, str], lr: float, use_pretrained: bool = True, compile: bool = False, local_processor: bool = False):
         super().__init__()
-        model_id = "facebook/mask2former-swin-base-ade-semantic"
+        #model_id = "facebook/mask2former-swin-base-ade-semantic"
+        model_id   = "facebook/mask2former-swin-large-mapillary-vistas-semantic"
         proc_dir = "artifacts/mask2former_image_processor"
         cfg_dir  = "artifacts/mask2former_config"
 
